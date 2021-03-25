@@ -7,4 +7,4 @@ if [ -d /run/systemd/system ]; then
   systemctl --system daemon-reload > /dev/null || true
 fi
 
-systemctl start rockpi-poe.service > /dev/null
+#systemctl start rockpi-poe.service > /dev/null

@@ -1,61 +1,61 @@
 #!/usr/bin/env python3
-import os
-import re
 import sys
 import time
+import shutil
 import syslog
-import RPi.GPIO as GPIO  # pylint: disable=import-error
-from pathlib import Path
+try:
+    import mraa  # pylint: disable=import-error
+except ImportError:
+    syslog.syslog('Maybe need reboot.')
 from configparser import ConfigParser
 
 conf = {}
-GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
-GPIO.setup(13, GPIO.OUT, initial=GPIO.LOW)
-pin13 = GPIO.PWM(13, 75)
-p1 = re.compile(r't=(\d+)\n$')
+try:
+    pin16 = mraa.Gpio(16)
+except Exception:  # pin16 not available on v1.3
+    pin16 = None
+try:
+    pin13 = mraa.Pwm(13)
+    pin13.period_ms(13)
+    pin13.enable(True)
+except Exception:
+    pin13 = None
 
 
 def enable_poe():
-    with open('/boot/config.txt', 'r') as f:
-        content = f.read()
+    def replace(filename, raw_str, new_str):
+        with open(filename, 'r') as f:
+            content = f.read()
 
-    if 'dtoverlay=w1-gpio' not in content:
-        with open('/boot/config.txt', 'w') as f:
-            f.write(content.strip() + '\ndtoverlay=w1-gpio')
+        shutil.move(filename, filename + '.bak')
+        content = content.replace(raw_str, new_str)
 
-    os.system('modprobe w1-gpio')
-    os.system('modprobe w1-therm')
+        with open(filename, 'w') as f:
+            f.write(content)
+
+    replace('/boot/hw_intfc.conf', 'intfc:pwm0=off', 'intfc:pwm0=on')
+    replace('/boot/hw_intfc.conf', 'intfc:pwm1=off', 'intfc:pwm1=on')
 
 
 def read_sensor_temp():
-    w1_slave = conf.get('w1_slave')
-    if not w1_slave:
-        try:
-            w1_slave = next(Path('/sys/bus/w1/devices/').glob('28*/w1_slave'))
-        except Exception:
-            w1_slave = 'not exist'
-            syslog.syslog('The sensor will take effect after reboot.')
-        conf['w1_slave'] = w1_slave
-
-    if w1_slave == 'not exist':
-        return 42
-    else:
-        with open(w1_slave) as f:
-            t = int(p1.search(f.read()).groups()[0]) / 1000.0
-        return t
+    # 42, the answer to life, the universe, and everything
+    v2t = lambda x: 42 + (960 - x) * 0.05  # noqa
+    with open('/sys/bus/iio/devices/iio:device0/in_voltage0_raw') as f:
+        t = v2t(int(f.read().strip()))
+    return t
 
 
-def read_soc_temp():
-    with open('/sys/class/thermal/thermal_zone0/temp') as f:
+def read_soc_temp(n=0):  # cpu:0  gpu:1
+    with open('/sys/class/thermal/thermal_zone{0}/temp'.format(n)) as f:
         t = int(f.read().strip()) / 1000.0
     return t
 
 
 def read_temp():
     t1 = read_sensor_temp()
-    t2 = read_soc_temp()
-    return max(t1, t2)
+    t2 = read_soc_temp(0)
+    t3 = read_soc_temp(1)
+    return max(t1, t2, t3)
 
 
 def read_conf():
@@ -75,24 +75,24 @@ def read_conf():
 
 def change_dc(dc, cache={}):
     if dc != cache.get('dc'):
-        pin13.ChangeDutyCycle(dc)
+        pin13.write(dc)
         cache['dc'] = dc
 
 
 def turn_off():
     try:
-        GPIO.setup(22, GPIO.OUT)
-        GPIO.output(22, GPIO.LOW)
+        pin16.dir(mraa.DIR_OUT)
+        pin16.write(0)
     finally:
-        pin13.stop()
-    
+        change_dc(1.0)
+
 
 def turn_on():
     try:
-        GPIO.setup(22, GPIO.OUT)
-        GPIO.output(22, GPIO.HIGH)
-    finally:  # BCM22 not available on v1.3 
-        pin13.start(100)
+        pin16.dir(mraa.DIR_OUT)
+        pin16.write(1)
+    finally:
+        change_dc(0.0)
 
     read_conf()
 
@@ -100,19 +100,19 @@ def turn_on():
         t = read_temp()
         if t >= conf['lv3']:
             print('100%')
-            change_dc(100)
+            change_dc(0.0)
         elif t >= conf['lv2']:
             print('75%')
-            change_dc(75)
+            change_dc(0.25)
         elif t >= conf['lv1']:
             print('50%')
-            change_dc(50)
+            change_dc(0.5)
         elif t >= conf['lv0']:
             print('25%')
-            change_dc(25)
+            change_dc(0.75)
         else:
             print('turn off')
-            change_dc(0)
+            change_dc(1.0)
         time.sleep(10)
 
 
@@ -126,7 +126,7 @@ def main():
         elif target == 'enable':
             enable_poe()
     except KeyboardInterrupt:
-        GPIO.cleanup()
+        turn_off()
     except Exception as ex:
         print(ex)
         print('using python3 rockpi-poe.py start|stop|enable')
