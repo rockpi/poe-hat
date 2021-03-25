@@ -1,0 +1,10 @@
+Package: rockpi-poe
+Version: 0.11
+Architecture: all
+Maintainer: Radxa <dev@radxa.com>
+Installed-Size: 4096
+Depends: python3
+Section: utils
+Priority: optional
+Homepage: https://github.com/rockpi/poe-hat
+Description: Rockpi PoE Fan Control

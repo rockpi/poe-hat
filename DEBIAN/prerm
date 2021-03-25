@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+
+systemctl stop rockpi-poe.service
+systemctl disable rockpi-poe.service
+
+if [ -d /run/systemd/system ]; then
+  systemctl --system daemon-reload > /dev/null || true
+fi
