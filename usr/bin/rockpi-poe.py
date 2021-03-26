@@ -99,19 +99,19 @@ def turn_on():
     while True:
         t = read_temp()
         if t >= conf['lv3']:
-            print('100%')
+            print('PoE Fan speed 100%')
             change_dc(0.0)
         elif t >= conf['lv2']:
-            print('75%')
+            print('PoE Fan speed 75%')
             change_dc(0.25)
         elif t >= conf['lv1']:
-            print('50%')
+            print('PoE Fan speed 50%')
             change_dc(0.5)
         elif t >= conf['lv0']:
-            print('25%')
+            print('PoE Fan speed 25%')
             change_dc(0.75)
         else:
-            print('turn off')
+            print('PoE Fan off')
             change_dc(1.0)
         time.sleep(10)
 
