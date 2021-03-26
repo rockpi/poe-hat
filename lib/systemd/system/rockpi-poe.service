@@ -3,8 +3,8 @@ Description=Rockpi PoE-FAN
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /usr/bin/rockpi-poe.py start
-ExecStop=/usr/bin/python3 /usr/bin/rockpi-poe.py stop
+ExecStart=/usr/bin/python3 -u /usr/bin/rockpi-poe.py start
+ExecStop=/usr/bin/python3 -u /usr/bin/rockpi-poe.py stop
 Restart=on-failure
 
 [Install]
